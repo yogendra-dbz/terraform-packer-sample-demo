@@ -1,0 +1,26 @@
+{
+  "_comment_aws": "Add AWS User input below",
+  "aws_access_key": "",
+  "aws_secret_key": "",
+  "destination_regions": "us-east-1",
+  
+  "_comment_azure": "Add Azure User input below",
+  "client_id": "",
+  "client_secret": "",
+  "tenant_id": "",
+  "subscription_id": "",
+  "resource_group_name":"",
+  "location": "Southeast Asia",
+  "vm_size":"Standard_DS2_v2",
+
+  "_comment_sonar": "Add Sonar User input below",
+  "SONAR_MYSQL_PASS":"default#1DFG",
+  "SONAR_DATABASE_NAME":"sonar",
+  "SONAR_DATABASE_PASS": "default#1DFG",
+
+  "_comment_jfrog": "Add Jfrog User input below",
+  "JFROG_MYSQL_PASS":"default#1DFG",
+  "JFROG_DATABASE_NAME":"artifactory",
+  "JFROG_DATABASE_PASS": "default#1DFG"
+}
+

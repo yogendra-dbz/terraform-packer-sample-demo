@@ -1,0 +1,311 @@
+{
+  "variables": {
+    "aws_access_key": "",
+    "aws_secret_key": "",
+    "destination_regions": "",
+    "client_id": "",
+    "client_secret": "",
+    "tenant_id": "",
+    "subscription_id": "",
+    "resource_group_name":"",
+    "location": "",
+    "vm_size":"",
+    "SONAR_MYSQL_PASS":"",
+    "SONAR_DATABASE_NAME":"",
+    "SONAR_DATABASE_PASS": "",
+    "JFROG_MYSQL_PASS":"",
+    "JFROG_DATABASE_NAME":"",
+    "JFROG_DATABASE_PASS": ""
+  },
+  "builders": [
+  {
+    "name": "sonar",
+    "type": "amazon-ebs",
+    "access_key": "{{user `aws_access_key`}}",
+    "secret_key": "{{user `aws_secret_key`}}",
+    "region": "us-east-1",
+    "source_ami_filter": {
+      "filters": {
+      "virtualization-type": "hvm",
+      "name": "ubuntu/images/*ubuntu-xenial-16.04-amd64-server-*",
+      "root-device-type": "ebs"
+      },
+      "owners": ["099720109477"],
+      "most_recent": true
+    },
+    "ami_regions":"{{user `destination_regions`}}",
+    "instance_type": "t2.small",
+    "ssh_username": "ubuntu",
+    "ami_name": "sonar-ubuntu-16.04-{{timestamp}}"
+  },
+  {
+    "name": "jfrog-artifactory",
+    "type": "amazon-ebs",
+    "access_key": "{{user `aws_access_key`}}",
+    "secret_key": "{{user `aws_secret_key`}}",
+    "region": "us-east-1",
+    "source_ami_filter": {
+      "filters": {
+      "virtualization-type": "hvm",
+      "name": "ubuntu/images/*ubuntu-xenial-16.04-amd64-server-*",
+      "root-device-type": "ebs"
+      },
+      "owners": ["099720109477"],
+      "most_recent": true
+    },
+    "ami_regions":"{{user `destination_regions`}}",
+    "instance_type": "t2.small",
+    "ssh_username": "ubuntu",
+    "ami_name": "jfrog-ubuntu-16.04-{{timestamp}}"
+  },
+  {
+    "name":"azure-jenkins",
+    "type": "azure-arm",
+    "client_id": "{{user `client_id`}}",
+    "client_secret": "{{user `client_secret`}}",
+    "tenant_id": "{{user `tenant_id`}}",
+    "subscription_id": "{{user `subscription_id`}}",
+
+    "managed_image_resource_group_name": "{{user `resource_group_name`}}",
+    "managed_image_name": "jenkins-ubuntu-16.04-{{timestamp}}",
+
+    "os_type": "Linux",
+    "image_publisher": "Canonical",
+    "image_offer": "UbuntuServer",
+    "image_sku": "16.04-LTS",
+
+    "azure_tags": {
+        "dept": "Engineering",
+        "task": "Image deployment"
+    },
+
+    "location": "{{user `location` }}",
+    "vm_size": "{{user `vm_size`}}"
+  }],
+  "provisioners": [{
+    "type": "shell",
+    "inline": [
+      "sleep 30",
+      "sudo add-apt-repository ppa:webupd8team/java -y",
+      "sudo apt-get update -y",
+      "sudo echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections",
+      "sudo apt-get install oracle-java8-installer -y",
+      "sudo apt-get update",
+      "sudo apt-get -y install apache2 unzip",
+      "sudo a2enmod proxy",
+      "sudo a2enmod proxy_http",
+      "sudo systemctl restart apache2",
+      "sudo systemctl enable apache2"
+    ],
+    "pause_before": "10s",
+    "except":["azure-jenkins"]
+   },
+  {
+    "type": "file",
+    "source": "./packer/mysql_database_setup.sh",
+    "destination": "/tmp/",
+    "only": ["sonar"]
+
+  },
+  {
+    "type": "file",
+    "source": "./packer/sonar.conf",
+    "destination": "/tmp/",
+    "only": ["sonar"]
+
+  },
+  {
+    "type": "file",
+    "source": "./packer/sonar_properties.sh",
+    "destination": "/tmp/",
+    "only": ["sonar"]
+ },
+  {
+    "type": "file",
+    "source": "./packer/sonar.service",
+    "destination": "/tmp/",
+    "only": ["sonar"]
+ },
+  {
+    "type": "shell",
+    "inline": [
+      "sleep 30",
+      "sudo apt-get update -y",
+      "sudo apt-get upgrade -y",
+      "sudo add-apt-repository 'deb http://archive.ubuntu.com/ubuntu trusty universe' -y",
+      "sudo apt-get update -y",
+     "echo 'mysql-server-5.6 mysql-server/root_password password {{user `SONAR_MYSQL_PASS`}}' | sudo debconf-set-selections",
+      "echo 'mysql-server-5.6 mysql-server/root_password_again password {{user `SONAR_MYSQL_PASS`}}' | sudo debconf-set-selections",
+      "sudo apt-get install mysql-server-5.6 -y",
+      "sudo systemctl restart mysql",
+      "sudo systemctl enable mysql",  
+      "sudo chmod +x /tmp/mysql_database_setup.sh",
+      "/tmp/mysql_database_setup.sh {{user  `SONAR_MYSQL_PASS`}} {{user `SONAR_DATABASE_NAME`}}  {{user `SONAR_DATABASE_PASS`}} "
+    ],
+    "only": ["sonar"],
+    "pause_before": "10s"
+  },
+ {
+   "type": "shell",
+    "inline": [
+      "sleep 10",
+      "wget https://sonarsource.bintray.com/Distribution/sonarqube/sonarqube-6.4.zip",
+      "sudo unzip sonarqube-6.4.zip -d /opt",
+      "sudo mv /opt/sonarqube-6.4 /opt/sonar",
+      "sudo chmod +x /tmp/sonar_properties.sh",
+      "/tmp/sonar_properties.sh {{user `SONAR_DATABASE_NAME`}} {{user `SONAR_DATABASE_PASS`}} ",
+      "sudo mv /tmp/sonar.conf /etc/apache2/sites-available/000-default.conf",
+      "sudo mv /tmp/sonar.service /etc/systemd/system/",
+      "sudo systemctl start sonar",
+      "sudo systemctl enable sonar",
+      "sudo systemctl restart apache2" 
+    ],
+    "only": ["sonar"],
+    "pause_before": "10s"
+  },
+  {
+    "type": "file",
+    "source": "./packer/mysql_database_setup.sh",
+    "destination": "/tmp/",
+    "only": ["jfrog-artifactory"]
+
+  },
+  {
+    "type": "file",
+    "source": "./packer/jfrog.conf",
+    "destination": "/tmp/",
+    "only": ["jfrog-artifactory"]
+
+  },
+  {
+    "type": "file",
+    "source": "./packer/jfrog_properties.sh",
+    "destination": "/tmp/",
+    "only": ["jfrog-artifactory"]
+ },
+ {
+    "type": "file",
+    "source": "./packer/artifactory.config.import.yml",
+    "destination": "/tmp/",
+    "only": ["jfrog-artifactory"]
+ },
+ {
+    "type": "shell",
+    "inline": [
+      "sleep 30",
+      "sudo apt-get update",
+      "sudo apt-get -y upgrade",
+      "sudo add-apt-repository 'deb http://archive.ubuntu.com/ubuntu trusty universe' -y",
+      "sudo apt-get update -y",
+      "echo 'mysql-server-5.6 mysql-server/root_password password {{user `JFROG_MYSQL_PASS`}}' | sudo debconf-set-selections",
+      "echo 'mysql-server-5.6 mysql-server/root_password_again password {{user `JFROG_MYSQL_PASS`}}' | sudo debconf-set-selections",
+      "sudo apt-get install mysql-server-5.6 -y",
+      "sudo systemctl restart mysql",
+      "sudo systemctl enable mysql", 
+      "sudo chmod +x /tmp/mysql_database_setup.sh",
+      "/tmp/mysql_database_setup.sh {{user  `JFROG_MYSQL_PASS`}} {{user `JFROG_DATABASE_NAME`}}  {{user `JFROG_DATABASE_PASS`}} "
+    ],
+    "only": ["jfrog-artifactory"],
+    "pause_before": "10s"
+  },
+ {
+   "type": "shell",
+    "inline": [
+      "sleep 10",
+      "wget -c -O- 'https://bintray.com/user/downloadSubjectPublicKey?username=jfrog' | sudo apt-key add -",
+      "echo 'deb https://bintray.com/artifact/download/jfrog/artifactory-debs trusty main' | sudo tee -a /etc/apt/sources.list.d/artifactory-oss.list",
+      "sudo apt-get update -y",
+      "sudo apt-get -y install jfrog-artifactory-oss",
+      "sudo wget -nv --timeout=30 -O /opt/jfrog/artifactory/tomcat/lib/mysql-connector-java-5.1.24.jar http://repo.jfrog.org/artifactory/remote-repos/mysql/mysql-connector-java/5.1.24/mysql-connector-java-5.1.24.jar 2>&1", 
+      "sudo chmod +x /tmp/jfrog_properties.sh",
+      "/tmp/jfrog_properties.sh {{user `JFROG_DATABASE_NAME`}} {{user `JFROG_DATABASE_PASS`}} ",
+      "sudo mv /tmp/artifactory.config.import.yml  /var/opt/jfrog/artifactory/etc/",
+      "sudo service artifactory start",
+      "sudo mv /tmp/jfrog.conf /etc/apache2/sites-available/000-default.conf",
+      "sudo systemctl restart apache2" 
+    ],
+    "only": ["jfrog-artifactory"],
+    "pause_before": "10s"
+  },
+  {
+    "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'",
+    "inline": [
+      "sudo add-apt-repository ppa:webupd8team/java -y",
+      "sudo apt-get update -y",
+      "sudo echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections",
+      "sudo apt-get install oracle-java8-installer -y",
+      "sudo apt-get update",
+      "sudo apt-get -y install apache2 unzip",
+      "sudo a2enmod proxy",
+      "sudo a2enmod proxy_http",
+      "sudo systemctl restart apache2",
+      "sudo systemctl enable apache2"
+    ],
+    "inline_shebang": "/bin/sh -x",
+    "type": "shell",
+    "only": ["azure-jenkins"]
+  },
+  {
+    "type": "file",
+    "source": "./packer/jenkins.conf",
+    "destination": "/tmp/",
+    "only": ["azure-jenkins"]
+  },
+  {
+    "type": "file",
+    "source": "./packer/mavenenv.sh",
+    "destination": "/tmp/",
+    "only": ["azure-jenkins"]
+  },
+  {
+    "type": "file",
+    "source": "./packer/ant.sh",
+    "destination": "/tmp/",
+    "only": ["azure-jenkins"]
+  },
+  {
+    "type": "file",
+    "source": "./packer/basic-security.groovy",
+    "destination": "/tmp/",
+    "only": ["azure-jenkins"]
+  },
+  {
+    "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'",
+    "inline": [
+      "sudo wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -",
+      "sudo echo 'deb https://pkg.jenkins.io/debian-stable binary/' | sudo tee -a /etc/apt/sources.list",
+      "sudo apt-get update",
+      "sudo apt-get -y install jenkins",
+      "sudo systemctl start jenkins",
+      "sudo systemctl enable jenkins",      
+      "sudo mv /tmp/jenkins.conf /etc/apache2/sites-available/000-default.conf",
+      "sudo mkdir -p /var/lib/jenkins/init.groovy.d",
+      "sudo mv /tmp/basic-security.groovy /var/lib/jenkins/init.groovy.d/basic-security.groovy",
+      "sudo chown -R jenkins:jenkins /var/lib/jenkins/init.groovy.d",
+      "echo 'JAVA_ARGS=\"$JAVA_ARGS -Djenkins.install.runSetupWizard=false\"' | sudo tee -a /etc/default/jenkins",
+      "sudo systemctl restart apache2",
+      "sudo systemctl restart jenkins",
+      "sudo wget http://www-eu.apache.org/dist/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz",
+      "sudo tar -xvzf apache-maven-3.3.9-bin.tar.gz -C /usr/local",
+      "sudo mv /usr/local/apache-maven-3.3.9 /usr/local/apache-maven",
+      "sudo ln -s /usr/local/apache-maven/ /usr/local/maven",
+      "sudo mv /tmp/mavenenv.sh /etc/profile.d/mavenenv.sh",
+      "sudo chmod +x /etc/profile.d/mavenenv.sh",
+      "sudo wget http://www-us.apache.org/dist//ant/binaries/apache-ant-1.10.4-bin.zip",
+      "sudo unzip apache-ant-1.10.4-bin.zip  -d /usr/local",
+      "sudo mv /usr/local/apache-ant-1.10.4 /usr/local/apache-ant",
+      "sudo ln -s /usr/local/apache-ant/ /usr/local/ant",
+      "sudo mv /tmp/ant.sh /etc/profile.d/ant.sh",
+      "sudo chmod +x /etc/profile.d/ant.sh",
+      "sudo add-apt-repository ppa:cwchien/gradle -y",
+      "sudo apt-get update",
+      "sudo apt-get install gradle -y",
+
+      "/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync"
+    ],
+    "inline_shebang": "/bin/sh -x",
+    "type": "shell",
+    "only": ["azure-jenkins"]
+  }
+  ]
+}
