@@ -44,6 +44,6 @@
 * chmod +x run.sh
 * ./run.sh workflow-hybrid
 
-References:
-https://www.terraform.io/
-https://www.packer.io/docs/index.html
+### References:
+* https://www.terraform.io/
+* https://www.packer.io/docs/index.html
