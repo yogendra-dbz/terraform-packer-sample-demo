@@ -1,17 +1,5 @@
 # Terraform-Packer SetUp
 
-## Git cmds to clone and make changes
-
-* git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/terraform-packer-sample-demo ( Enter credentials when prompted )
-* Navigate to terraform-packer-sample-demo
-* Execute `git init`
-* Execute `git status`
-* Change / Add a file 
-* Execute `git status` , you should see your changes
-* Execute `git add .`
-* Execute `git commit -m "NewFile\ChangeFile"`
-* Execute `git push -u origin master`
-
 ## Prerequisites
 
 * Install Terraform  - <https://www.terraform.io/intro/getting-started/install.html>
